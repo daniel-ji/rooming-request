@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>Rooming Request Calculator</title>
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+		integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+</head>
+
+<body class="d-flex align-items-center flex-column">
+	<h1 class="mt-5">Rooming Request Calculator</h1>
+	<p class="mt-3">Splits a group of people into two groups, based on their preferences for each other. Designed for Suite 300!</p>
+	<p>Example data file to test with <a href="https://docs.google.com/spreadsheets/d/1L2j2OveSajhy8J5ogq28n1YaqXIBRoOm9SmdmrhpidE/edit?usp=sharing" target="_blank" rel="noreferrer">here</a>.</p>
+	<div class="mt-4">
+		<label for="csv-upload" class="form-label">Upload CSV file (Google Sheets -> File -> Download -> .csv)</label>
+		<input class="form-control" type="file" id="csv-upload" accept=".csv">
+		<h5 class="mt-3 text-center">Results: </h5>
+		<p id="result" class="mt-3 text-center"></p>
+
+	</div>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+		integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+		crossorigin="anonymous"></script>
+	<script>
+		const SCALE_FACTOR = 1;
+		const TOTAL_GROUP_COUNT = 2;
+
+		function getCombinations(arr, groupSize) {
+			const combinations = [];
+
+			function generateCombo(start, combo) {
+				if (combo.length === groupSize) {
+					combinations.push([...combo]);
+					return;
+				}
+
+				for (let i = start; i < arr.length; i++) {
+					combo.push(arr[i]);
+					generateCombo(i + 1, combo);
+					combo.pop(); // backtrack
+				}
+			}
+
+			generateCombo(0, []);
+			return combinations;
+		}
+
+		function calculateBestGroups(data, names) {
+			// try every combination of people into two groups
+			const groupWeights = [];
+			const combinations = getCombinations(Array.from(names), names.size / TOTAL_GROUP_COUNT);
+			combinations.forEach(combo => {
+				const group1 = combo;
+				const group2 = Array.from(names).filter(name => !group1.includes(name));
+				let group1Weight = 0;
+				let group2Weight = 0;
+				group1.forEach(person => {
+					if (data[person] === undefined) {
+						return;
+					}
+
+					let personWeight = 0;
+					group1.forEach(otherPerson => {
+						if (person !== otherPerson) {
+							personWeight += data[person][otherPerson] ?? 0;
+						}
+					});
+
+					group1Weight += personWeight;
+				});
+
+				group2.forEach(person => {
+					if (data[person] === undefined) {
+						return;
+					}
+
+					let personWeight = 0;
+					group2.forEach(otherPerson => {
+						if (person !== otherPerson) {
+							personWeight += data[person][otherPerson] ?? 0;
+						}
+					});
+
+					group2Weight += personWeight;
+				});
+
+				groupWeights.push({
+					group1,
+					group2,
+					group1Weight,
+					group2Weight,
+					totalWeight: group1Weight ** 2 + group2Weight ** 2,
+				});
+			});
+
+			groupWeights.sort((a, b) => a.totalWeight - b.totalWeight);
+
+			return groupWeights;
+		}
+
+		function parseFile(text) {
+			const names = new Set();
+			const data = {};
+			const lines = text.split('\n');
+			const headers = lines[0].split(',').slice(1);
+			lines.slice(1).forEach(line => {
+				const values = line.split(',').slice(1);
+				const obj = {};
+				let person = undefined;
+				headers.forEach((header, i) => {
+					// only extract the name (within brackets)
+					const name = header.slice(header.indexOf('[') + 1, header.indexOf(']'));
+					if (values[i] === "0") {
+						person = name;
+					}
+					obj[name] = parseInt(values[i]) ** SCALE_FACTOR;
+					names.add(name);
+				});
+				data[person] = obj;
+			});
+
+			return { data, names };
+		}
+
+		document.getElementById('csv-upload').addEventListener('change', function (e) {
+			const file = e.target.files[0];
+			const reader = new FileReader();
+			reader.onload = function (e) {
+				const { data, names } = parseFile(e.target.result);
+				const bestGroups = calculateBestGroups(data, names);
+				console.log(bestGroups);
+				const resultText = `Group 1: ${bestGroups[0].group1.join(', ')}<br/><br/>Group 2: ${bestGroups[0].group2.join(', ')}`;
+				document.getElementById('result').innerHTML = resultText;
+			};
+			reader.readAsText(file);
+		});
+	</script>
+</body>
+
+</html>
